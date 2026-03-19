@@ -307,7 +307,7 @@
   // ── GitHub Pages URL ───────────────────────────────────────
   // Vervang dit met jouw eigen GitHub Pages URL na setup.
   // Formaat: 'https://JOUW-GEBRUIKERSNAAM.github.io/REPO-NAAM'
-  const GITHUB_PAGES_URL = 'https://jacobvmconsult.github.io/EV-calculator/';
+  const GITHUB_PAGES_URL = 'https://JOUW-GEBRUIKERSNAAM.github.io/REPO-NAAM';
 
   // CREG CSV
   const CREG_CSV   = 'https://www.creg.be/sites/default/files/assets/Prices/CREG_Tariff_EV.csv';
@@ -586,7 +586,12 @@ async function loadCreg() {
 
   if (!data) {
     document.getElementById('lastFetchTxt').textContent = 'Ophalen mislukt';
-    msgShowTxt('fetchErr', '❌ CREG niet bereikbaar. Controleer je verbinding.');
+    msgShowTxt('fetchErr',
+      `❌ CREG niet bereikbaar via browser.<br>
+       <strong>Handmatige oplossing:</strong> Ga naar
+       <a href="https://www.creg.be/nl/consumenten/prijzen-en-tarieven/creg-tarief-voor-terugbetaling-thuisladen-bedrijfswagens"
+          target="_blank" style="color:var(--accent2)">creg.be</a>,
+       lees het tarief af en pas <strong>rate.json</strong> handmatig aan op GitHub.`);
     return;
   }
 
@@ -673,9 +678,15 @@ function parseCregCsv(raw) {
 }
 
 async function fetchCsvCreg() {
-  for (const url of [CREG_CSV, CORS_PROXY + encodeURIComponent(CREG_CSV)]) {
+  const proxies = [
+    url => url,                                                          // direct
+    url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    url => `https://corsproxy.org/?${encodeURIComponent(url)}`,
+  ];
+  for (const proxy of proxies) {
     try {
-      const r = await fetch(url, { cache: 'no-store' });
+      const r = await fetch(proxy(CREG_CSV), { cache: 'no-store' });
       if (!r.ok) continue;
       const d = parseCregCsv(await r.text());
       if (d) return d;
