@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EV Prijs Calculator – De Mobiliteitsmakelaar</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:      #0d0f14;
+    --surface: #13161e;
+    --card:    #1a1e2a;
+    --border:  #252a38;
+    --accent:  #00e5a0;
+    --accent2: #0096ff;
+    --danger:  #ff4d6a;
+    --warn:    #f59e0b;
+    --text:    #e8ecf4;
+    --muted:   #6b7591;
+    --mono:    'DM Mono', monospace;
+    --sans:    'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--sans);
+    min-height: 100vh; padding: 32px 16px;
+    background-image:
+      radial-gradient(ellipse 60% 40% at 80% -10%, rgba(0,229,160,.07) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 30% at 10% 100%, rgba(0,150,255,.05) 0%, transparent 55%);
+  }
+
+  .wrapper { max-width: 680px; margin: 0 auto; }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: flex-start;
+    justify-content: space-between; margin-bottom: 28px; gap: 16px;
+  }
+  .logo { display: flex; align-items: center; gap: 14px; }
+  .logo-icon {
+    width: 48px; height: 48px; border-radius: 11px; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+    display: flex; align-items: center; justify-content: center; font-size: 22px;
+  }
+  .logo-text h1 { font-size: 17px; font-weight: 800; letter-spacing: -.3px; line-height: 1.15; }
+  .logo-text p  { font-size: 11px; color: var(--accent); font-family: var(--mono); margin-top: 3px; letter-spacing: .5px; }
+
+  /* ── Rate pill ── */
+  .rate-badge { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .rate-pill {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 14px; text-align: right; min-width: 130px;
+    transition: border-color .4s;
+  }
+  .rate-pill.ready    { border-color: rgba(0,229,160,.45); }
+  .rate-pill.fallback { border-color: rgba(245,158,11,.4); }
+  .rate-val-row { display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
+  .rate-num { font-family: var(--mono); font-size: 18px; font-weight: 500; color: var(--accent); letter-spacing: -.5px; }
+  .rate-sub { font-family: var(--mono); font-size: 10px; color: var(--muted); display: block; margin-top: 2px; }
+
+  .spinner {
+    width: 11px; height: 11px; border: 2px solid rgba(0,229,160,.25);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin .7s linear infinite; flex-shrink: 0; display: none;
+  }
+  .spinner.on { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .live-dot {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; display: none;
+    background: var(--accent); box-shadow: 0 0 6px var(--accent);
+    animation: pulse 2.2s ease-in-out infinite;
+  }
+  .live-dot.on   { display: block; }
+  .live-dot.warn { background: var(--warn); box-shadow: 0 0 6px var(--warn); animation: none; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+  /* ── Banner ── */
+  .banner {
+    border-radius: 10px; padding: 11px 16px; margin-bottom: 16px;
+    font-family: var(--mono); font-size: 12px; line-height: 1.65;
+    display: none; align-items: flex-start; gap: 10px; animation: fadeUp .3s ease;
+  }
+  .banner.show { display: flex; }
+  .banner.ok   { background: rgba(0,229,160,.07); border: 1px solid rgba(0,229,160,.2); }
+  .banner.warn { background: rgba(245,158,11,.07); border: 1px solid rgba(245,158,11,.25); }
+  .banner .ico  { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+  .banner .btxt { color: var(--text); }
+  .banner .btxt strong { color: var(--accent); }
+  .banner.warn .btxt strong { color: var(--warn); }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+
+  /* ── Admin button ── */
+  .admin-btn {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--muted); font-family: var(--mono); font-size: 11px;
+    padding: 6px 12px; border-radius: 6px; cursor: pointer;
+    display: flex; align-items: center; gap: 6px; transition: all .2s; white-space: nowrap;
+  }
+  .admin-btn:hover { border-color: var(--danger); color: var(--danger); }
+  .admin-btn .dot  { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); transition: background .2s; }
+  .admin-btn.active { border-color: var(--danger); color: var(--danger); }
+  .admin-btn.active .dot { background: var(--danger); }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 28px; margin-bottom: 16px;
+    position: relative; overflow: hidden;
+  }
+  .card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    opacity: 0; transition: opacity .3s;
+  }
+  .card:focus-within::before { opacity: 1; }
+  .card-label {
+    font-size: 11px; font-family: var(--mono); color: var(--accent);
+    text-transform: uppercase; letter-spacing: 1.5px;
+    margin-bottom: 20px; display: flex; align-items: center; gap: 8px;
+  }
+  .card-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* ── Fields ── */
+  .field { margin-bottom: 20px; }
+  .field:last-child { margin-bottom: 0; }
+  label { display: block; font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+  label span { font-family: var(--mono); font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 4px; }
+  .input-wrap { position: relative; display: flex; align-items: center; }
+  input[type="number"], input[type="password"] {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--mono); font-size: 16px;
+    padding: 12px 56px 12px 16px; border-radius: 8px; outline: none;
+    transition: border-color .2s, box-shadow .2s; -moz-appearance: textfield;
+  }
+  input[type="password"] { padding-right: 16px; }
+  input::-webkit-inner-spin-button, input::-webkit-outer-spin-button { -webkit-appearance: none; }
+  input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,229,160,.10); }
+  input::placeholder { color: var(--muted); font-size: 14px; }
+  .unit { position: absolute; right: 14px; font-family: var(--mono); font-size: 12px; color: var(--muted); pointer-events: none; }
+
+  /* ── Battery ── */
+  .battery-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  .battery-vis { height: 10px; background: var(--surface); border-radius: 99px; margin-top: 10px; overflow: hidden; border: 1px solid var(--border); }
+  .battery-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width .4s cubic-bezier(.25,.8,.25,1); }
+  .used-fill { background: linear-gradient(90deg, #ff4d6a, #ff8c42); }
+
+  /* ── Calc button ── */
+  .calc-btn {
+    width: 100%; background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+    color: #060810; font-family: var(--sans); font-size: 15px; font-weight: 800;
+    padding: 16px; border: none; border-radius: 10px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: transform .15s, box-shadow .2s; margin-top: 8px;
+  }
+  .calc-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,229,160,.25); }
+  .calc-btn:active { transform: translateY(0); }
+
+  /* ── Result ── */
+  .result-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 28px; margin-bottom: 16px; display: none; position: relative;
+  }
+  .result-card.show { display: block; animation: fadeUp .35s cubic-bezier(.25,.8,.25,1); }
+  .result-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px;
+    background: var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 20px;
+  }
+  .result-cell { background: var(--surface); padding: 18px 16px; text-align: center; }
+  .result-cell .val { font-family: var(--mono); font-size: 22px; font-weight: 500; color: var(--text); display: block; }
+  .result-cell .lbl { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
+  .total-box {
+    background: linear-gradient(135deg, rgba(0,229,160,.08) 0%, rgba(0,150,255,.06) 100%);
+    border: 1px solid rgba(0,229,160,.2); border-radius: 10px;
+    padding: 20px 24px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .total-label  { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: .5px; }
+  .total-amount { font-family: var(--mono); font-size: 32px; font-weight: 500; color: var(--accent); letter-spacing: -1px; }
+  .currency { font-size: 16px; margin-right: 2px; color: var(--muted); }
+
+  /* ── Admin panel ── */
+  .admin-panel { display: none; }
+  .admin-panel.show { display: block; animation: fadeUp .3s ease; }
+  .admin-card {
+    background: var(--card); border: 1px solid rgba(255,77,106,.3);
+    border-radius: 14px; padding: 28px; margin-bottom: 16px; position: relative;
+  }
+  .admin-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--danger), #ff8c42); border-radius: 14px 14px 0 0;
+  }
+  .admin-label {
+    font-size: 11px; font-family: var(--mono); color: var(--danger);
+    text-transform: uppercase; letter-spacing: 1.5px;
+    margin-bottom: 20px; display: flex; align-items: center; gap: 8px;
+  }
+  .admin-label::after { content: ''; flex: 1; height: 1px; background: rgba(255,77,106,.2); }
+  .auth-wrap { display: flex; gap: 10px; }
+  .auth-wrap input { flex: 1; padding-right: 16px; }
+  .auth-btn {
+    background: var(--danger); color: white; font-family: var(--sans); font-weight: 700;
+    font-size: 13px; padding: 12px 20px; border: none; border-radius: 8px;
+    cursor: pointer; white-space: nowrap; transition: opacity .2s;
+  }
+  .auth-btn:hover { opacity: .85; }
+  .admin-body { display: none; margin-top: 24px; padding-top: 24px; border-top: 1px solid rgba(255,77,106,.15); }
+  .admin-body.show { display: block; animation: fadeUp .3s ease; }
+
+  /* Rate info box */
+  .rate-info-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 20px; margin-bottom: 22px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  }
+  .rib-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.8; }
+  .rib-meta strong { color: var(--text); }
+  .rib-val  { font-family: var(--mono); font-size: 26px; color: var(--accent); font-weight: 500; white-space: nowrap; }
+
+  /* CREG fetch block */
+  .fetch-block {
+    background: rgba(0,229,160,.04); border: 1px solid rgba(0,229,160,.15);
+    border-radius: 10px; padding: 18px; margin-bottom: 20px;
+  }
+  .fetch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .fetch-info h3 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .fetch-info p  { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .fetch-btn {
+    background: rgba(0,229,160,.12); border: 1px solid rgba(0,229,160,.3);
+    color: var(--accent); font-family: var(--mono); font-size: 12px; font-weight: 500;
+    padding: 9px 18px; border-radius: 8px; cursor: pointer; white-space: nowrap;
+    transition: all .2s; flex-shrink: 0; display: flex; align-items: center; gap: 7px;
+  }
+  .fetch-btn:hover:not(:disabled) { background: rgba(0,229,160,.22); border-color: var(--accent); }
+  .fetch-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* CREG table */
+  .creg-result { display: none; margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(0,229,160,.1); }
+  .creg-result.show { display: block; animation: fadeUp .3s ease; }
+  .creg-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+  .creg-table th { color: var(--muted); font-weight: 400; text-align: left; padding: 4px 8px 8px 0; border-bottom: 1px solid var(--border); }
+  .creg-table td { color: var(--text); padding: 6px 8px 6px 0; border-top: 1px solid var(--border); }
+  .creg-table tr.top td { color: var(--accent); font-weight: 500; }
+
+  /* GitHub update block */
+  .github-block {
+    display: none; margin-top: 16px; padding: 16px;
+    background: rgba(0,150,255,.05); border: 1px solid rgba(0,150,255,.2);
+    border-radius: 10px; animation: fadeUp .3s ease;
+  }
+  .github-block.show { display: block; }
+  .github-block h3 { font-size: 13px; font-weight: 600; color: var(--accent2); margin-bottom: 12px; }
+  .github-block ol { font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 2.2; padding-left: 18px; }
+  .github-block ol li strong { color: var(--text); }
+  .github-block code {
+    background: rgba(0,150,255,.12); color: var(--accent2);
+    padding: 2px 7px; border-radius: 4px; font-size: 11px;
+    user-select: all; cursor: pointer;
+  }
+  .json-preview {
+    margin-top: 14px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px;
+    font-family: var(--mono); font-size: 12px; color: var(--accent); line-height: 1.8;
+    white-space: pre; overflow-x: auto;
+  }
+  .copy-btn {
+    margin-top: 10px; width: 100%;
+    background: var(--accent2); color: white;
+    font-family: var(--sans); font-weight: 700; font-size: 12px;
+    padding: 10px; border: none; border-radius: 7px; cursor: pointer; transition: opacity .2s;
+  }
+  .copy-btn:hover { opacity: .85; }
+
+  .divider { margin: 22px 0; border: none; border-top: 1px solid rgba(255,77,106,.12); }
+
+  /* Messages */
+  .msg { font-family: var(--mono); font-size: 12px; padding: 10px 14px; border-radius: 6px; margin-top: 12px; display: none; line-height: 1.6; }
+  .msg.show    { display: block; animation: fadeUp .2s ease; }
+  .msg.success { background: rgba(0,229,160,.1); color: var(--accent); border: 1px solid rgba(0,229,160,.2); }
+  .msg.error   { background: rgba(255,77,106,.1); color: var(--danger); border: 1px solid rgba(255,77,106,.2); }
+
+  footer { text-align: center; margin-top: 32px; font-family: var(--mono); font-size: 11px; color: var(--muted); opacity: .4; }
+
+  @media (max-width: 480px) {
+    .result-grid { grid-template-columns: 1fr 1fr; }
+    .result-cell:last-child { grid-column: span 2; }
+    .battery-row { grid-template-columns: 1fr; }
+    .total-box { flex-direction: column; gap: 10px; align-items: flex-start; }
+    header { flex-direction: column; }
+    .rate-badge { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; }
+    .fetch-row { flex-direction: column; align-items: flex-start; }
+    .fetch-btn { width: 100%; justify-content: center; }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+<!-- ═══════════════════════════════════════════════════
+     CONFIGURATIE  ← ENKEL HIER AANPASSEN
+════════════════════════════════════════════════════ -->
+<script>
+  const ADMIN_PASSWORD = 'Deckx2024!';
+  const FALLBACK_RATE  = 0.3132;   // gebruikt als rate.json niet bereikbaar is
+
+  // ── GitHub Pages URL ───────────────────────────────────────
+  // Vervang dit met jouw eigen GitHub Pages URL na setup.
+  // Formaat: 'https://JOUW-GEBRUIKERSNAAM.github.io/REPO-NAAM'
+  const GITHUB_PAGES_URL = 'https://JOUW-GEBRUIKERSNAAM.github.io/REPO-NAAM';
+
+  // CREG CSV
+  const CREG_CSV   = 'https://www.creg.be/sites/default/files/assets/Prices/CREG_Tariff_EV.csv';
+  const CORS_PROXY = 'https://corsproxy.io/?url=';
+
+  // ── Runtime state ──────────────────────────────────────────
+  let currentRate   = FALLBACK_RATE;
+  let adminUnlocked = false;
+  let adminVisible  = false;
+  let cregData      = null;
+  let latestCregEntry = null;
+</script>
+
+<!-- ══ HEADER ══════════════════════════════════════════════ -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    <div class="logo-text">
+      <h1>EV Prijs Calculator</h1>
+      <p>De Mobiliteitsmakelaar</p>
+    </div>
+  </div>
+  <div class="rate-badge">
+    <div class="rate-pill" id="ratePill">
+      <div class="rate-val-row">
+        <div class="spinner on" id="pillSpinner"></div>
+        <div class="live-dot"   id="liveDot"></div>
+        <span class="rate-num"  id="rateNum">…</span>
+      </div>
+      <span class="rate-sub" id="rateSub">tarief laden</span>
+    </div>
+    <button class="admin-btn" id="adminBtn" onclick="toggleAdmin()">
+      <span class="dot"></span>Admin
+    </button>
+  </div>
+</header>
+
+<!-- ══ BANNER ══════════════════════════════════════════════ -->
+<div class="banner" id="banner">
+  <span class="ico"  id="bannerIco"></span>
+  <span class="btxt" id="bannerTxt"></span>
+</div>
+
+<!-- ══ ADMIN PANEL ═════════════════════════════════════════ -->
+<div class="admin-panel" id="adminPanel">
+  <div class="admin-card">
+    <div class="admin-label">⚙ Beheerdersinstellingen</div>
+
+    <div class="field">
+      <label>Beheerderwachtwoord</label>
+      <div class="auth-wrap">
+        <input type="password" id="adminPass" placeholder="Voer wachtwoord in…"
+               onkeydown="if(event.key==='Enter') authenticate()">
+        <button class="auth-btn" onclick="authenticate()">Inloggen</button>
+      </div>
+      <div class="msg error" id="authError">❌ Onjuist wachtwoord.</div>
+    </div>
+
+    <div class="admin-body" id="adminBody">
+
+      <!-- Active rate -->
+      <div class="rate-info-box">
+        <div class="rib-meta" id="ribMeta">Actief tarief (geladen uit rate.json)</div>
+        <span class="rib-val" id="ribVal">—</span>
+      </div>
+
+      <!-- CREG fetch -->
+      <div class="fetch-block">
+        <div class="fetch-row">
+          <div class="fetch-info">
+            <h3>Nieuw CREG-tarief ophalen</h3>
+            <p id="lastFetchTxt">Klik om het actuele kwartaaltarief te laden van creg.be</p>
+          </div>
+          <button class="fetch-btn" id="fetchBtn" onclick="loadCreg()">
+            <span id="fetchIco">↓</span> Ophalen
+          </button>
+        </div>
+        <div class="msg success" id="fetchOk"></div>
+        <div class="msg error"   id="fetchErr"></div>
+
+        <!-- CREG tabel -->
+        <div class="creg-result" id="cregResult">
+          <table class="creg-table">
+            <thead><tr><th>Kwartaal</th><th>Vlaanderen</th><th>Brussel</th><th>Wallonië</th></tr></thead>
+            <tbody id="cregBody"></tbody>
+          </table>
+        </div>
+
+        <!-- GitHub update instructie -->
+        <div class="github-block" id="githubBlock">
+          <h3>📋 Pas rate.json aan op GitHub</h3>
+          <ol>
+            <li>Ga naar jouw GitHub-repository</li>
+            <li>Open het bestand <strong>rate.json</strong></li>
+            <li>Klik op het <strong>potloodicoontje</strong> (Edit)</li>
+            <li>Vervang de inhoud met onderstaande waarden</li>
+            <li>Klik op <strong>Commit changes</strong></li>
+            <li>Na ~1 minuut is het nieuwe tarief actief voor iedereen</li>
+          </ol>
+          <div class="json-preview" id="jsonPreview"></div>
+          <button class="copy-btn" onclick="copyJson()">📋 Kopieer JSON naar klembord</button>
+          <div class="msg success" id="copyOk" style="margin-top:8px">✓ Gekopieerd!</div>
+        </div>
+      </div>
+
+    </div><!-- /admin-body -->
+  </div>
+</div>
+
+<!-- ══ INPUT CARD ══════════════════════════════════════════ -->
+<div class="card">
+  <div class="card-label">Voertuiggegevens</div>
+
+  <div class="field">
+    <label>Batterijcapaciteit <span>— totale kWh van de wagen</span></label>
+    <div class="input-wrap">
+      <input type="number" id="maxKwh" min="1" step="0.1" placeholder="bv. 77" oninput="liveUpdate()">
+      <span class="unit">kWh</span>
+    </div>
+  </div>
+
+  <div class="battery-row">
+    <div>
+      <div class="field">
+        <label>Vertrokken met <span>— % bij vertrek</span></label>
+        <div class="input-wrap">
+          <input type="number" id="pctLeft" min="0" max="100" step="1" placeholder="bv. 85" oninput="liveUpdate()">
+          <span class="unit">%</span>
+        </div>
+      </div>
+      <div class="battery-vis"><div class="battery-fill"      id="fillLeft"   style="width:0%"></div></div>
+    </div>
+    <div>
+      <div class="field">
+        <label>Teruggekomen met <span>— % bij terugkomst</span></label>
+        <div class="input-wrap">
+          <input type="number" id="pctReturn" min="0" max="100" step="1" placeholder="bv. 22" oninput="liveUpdate()">
+          <span class="unit">%</span>
+        </div>
+      </div>
+      <div class="battery-vis"><div class="battery-fill used-fill" id="fillReturn" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <button class="calc-btn" onclick="calculate()">⚡ Bereken kosten</button>
+</div>
+
+<!-- ══ RESULT ══════════════════════════════════════════════ -->
+<div class="result-card" id="resultCard">
+  <div class="card-label">Berekening</div>
+  <div class="result-grid">
+    <div class="result-cell"><span class="val" id="resUsedPct">—</span><span class="lbl">% verbruikt</span></div>
+    <div class="result-cell"><span class="val" id="resKwh">—</span><span class="lbl">kWh verbruikt</span></div>
+    <div class="result-cell"><span class="val" id="resRate">—</span><span class="lbl">€/kWh tarief</span></div>
+  </div>
+  <div class="total-box">
+    <div>
+      <div class="total-label">TOTAAL TE BETALEN</div>
+      <div style="font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:4px" id="resFormula">—</div>
+    </div>
+    <div class="total-amount"><span class="currency">€</span><span id="resTotal">—</span></div>
+  </div>
+</div>
+
+<footer>EV Prijs Calculator · De Mobiliteitsmakelaar · Deckx-Team</footer>
+</div>
+
+<!-- ══ JAVASCRIPT ══════════════════════════════════════════ -->
+<script>
+// ════════════════════════════════════════════════════════════
+//  INIT — laad tarief uit rate.json bij opstarten
+// ════════════════════════════════════════════════════════════
+async function init() {
+  setPill('loading');
+  try {
+    const url = GITHUB_PAGES_URL.replace(/\/$/, '') + '/rate.json?cb=' + Date.now();
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('niet bereikbaar');
+    const data = await res.json();
+    if (!data.rate) throw new Error('geen tarief');
+
+    currentRate = parseFloat(data.rate);
+    setPill('ready');
+    showBanner('ok', '✓',
+      `Actief CREG-tarief: <strong>${data.kwartaal || '—'}</strong> · Vlaanderen ·
+       <strong>€${currentRate.toFixed(4)}/kWh</strong> — bijgewerkt op ${data.updated || '—'}`);
+  } catch(e) {
+    currentRate = FALLBACK_RATE;
+    setPill('fallback');
+    showBanner('warn', 'ℹ',
+      `Standaardtarief actief: <strong>€${FALLBACK_RATE.toFixed(4)}/kWh</strong> (Q1 2026 Vl.) —
+       Controleer of <strong>GITHUB_PAGES_URL</strong> correct is ingesteld bovenaan het bestand.`);
+  }
+  updateAdminBox();
+}
+
+// ════════════════════════════════════════════════════════════
+//  RATE PILL
+// ════════════════════════════════════════════════════════════
+function setPill(state) {
+  const pill    = document.getElementById('ratePill');
+  const spinner = document.getElementById('pillSpinner');
+  const dot     = document.getElementById('liveDot');
+  const num     = document.getElementById('rateNum');
+  const sub     = document.getElementById('rateSub');
+
+  spinner.className = 'spinner'  + (state === 'loading'  ? ' on' : '');
+  dot.className     = 'live-dot' + (state === 'ready'    ? ' on' : state === 'fallback' ? ' on warn' : '');
+  pill.className    = 'rate-pill' + (state === 'fallback' ? ' fallback' : state === 'loading' ? '' : ' ready');
+
+  if (state === 'loading') { num.textContent = '…'; sub.textContent = 'tarief laden'; return; }
+  num.textContent = '€\u00A0' + currentRate.toFixed(4);
+  sub.textContent = state === 'fallback' ? 'Vlaanderen · standaard' : 'Vlaanderen · actueel';
+}
+
+// ════════════════════════════════════════════════════════════
+//  BANNER
+// ════════════════════════════════════════════════════════════
+function showBanner(type, ico, html) {
+  const el = document.getElementById('banner');
+  el.className = 'banner show ' + type;
+  document.getElementById('bannerIco').textContent = ico;
+  document.getElementById('bannerTxt').innerHTML   = html;
+}
+
+// ════════════════════════════════════════════════════════════
+//  ADMIN
+// ════════════════════════════════════════════════════════════
+function toggleAdmin() {
+  adminVisible = !adminVisible;
+  document.getElementById('adminPanel').classList.toggle('show', adminVisible);
+  document.getElementById('adminBtn').classList.toggle('active', adminVisible);
+  if (!adminVisible) {
+    adminUnlocked = false;
+    document.getElementById('adminBody').classList.remove('show');
+    document.getElementById('adminPass').value = '';
+    msgHide('authError');
+  }
+}
+
+function authenticate() {
+  if (document.getElementById('adminPass').value !== ADMIN_PASSWORD) {
+    msgShow('authError'); return;
+  }
+  msgHide('authError');
+  adminUnlocked = true;
+  document.getElementById('adminBody').classList.add('show');
+  updateAdminBox();
+}
+
+function updateAdminBox() {
+  const rv = document.getElementById('ribVal');
+  const rm = document.getElementById('ribMeta');
+  if (!rv) return;
+  rv.textContent = '€\u00A0' + currentRate.toFixed(4);
+  rm.innerHTML   = `Actief tarief — geladen uit <strong>rate.json</strong>`;
+}
+
+// ════════════════════════════════════════════════════════════
+//  CREG OPHALEN
+// ════════════════════════════════════════════════════════════
+async function loadCreg() {
+  const btn = document.getElementById('fetchBtn');
+  const ico = document.getElementById('fetchIco');
+  msgHide('fetchOk'); msgHide('fetchErr');
+  document.getElementById('cregResult').classList.remove('show');
+  document.getElementById('githubBlock').classList.remove('show');
+
+  btn.disabled = true;
+  ico.innerHTML = '<span style="display:inline-block;animation:spin .7s linear infinite">↻</span>';
+  document.getElementById('lastFetchTxt').textContent = 'Bezig met ophalen van creg.be…';
+
+  const data = await fetchCsvCreg();
+  btn.disabled     = false;
+  ico.textContent  = '↓';
+
+  if (!data) {
+    document.getElementById('lastFetchTxt').textContent = 'Ophalen mislukt';
+    msgShowTxt('fetchErr', '❌ CREG niet bereikbaar. Controleer je verbinding.');
+    return;
+  }
+
+  cregData = data;
+  latestCregEntry = [...data].reverse().find(r => r.Vlaanderen);
+
+  const now = new Date();
+  document.getElementById('lastFetchTxt').textContent =
+    `Opgehaald op ${now.toLocaleDateString('nl-BE')} om ${now.toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'})}`;
+
+  // Render tabel
+  const rows  = [...data].reverse().slice(0, 8);
+  document.getElementById('cregBody').innerHTML = rows.map((r, i) => `
+    <tr${i === 0 ? ' class="top"' : ''}>
+      <td>${r.period}${i === 0 ? ' ★' : ''}</td>
+      <td>${r.Vlaanderen ? (r.Vlaanderen*100).toFixed(2) : '—'}</td>
+      <td>${r.Brussel    ? (r.Brussel*100).toFixed(2)    : '—'}</td>
+      <td>${r.Wallonië   ? (r.Wallonië*100).toFixed(2)   : '—'}</td>
+    </tr>`).join('');
+
+  document.getElementById('cregResult').classList.add('show');
+
+  // Toon GitHub update instructie met kant-en-klare JSON
+  if (latestCregEntry) {
+    const json = buildRateJson(latestCregEntry);
+    document.getElementById('jsonPreview').textContent = json;
+    document.getElementById('githubBlock').classList.add('show');
+    msgShowTxt('fetchOk',
+      `✓ Meest recent: <strong>${latestCregEntry.period}</strong> · Vlaanderen:
+       <strong>${(latestCregEntry.Vlaanderen*100).toFixed(2)} c€/kWh</strong><br>
+       Kopieer de JSON hieronder en plak die in <strong>rate.json</strong> op GitHub.`);
+  }
+}
+
+function buildRateJson(entry) {
+  const today = new Date().toISOString().split('T')[0];
+  return JSON.stringify({
+    rate:     entry.Vlaanderen,
+    kwartaal: entry.period,
+    updated:  today,
+    notitie:  `CREG-tarief Vlaanderen ${entry.period}`
+  }, null, 2);
+}
+
+function copyJson() {
+  if (!latestCregEntry) return;
+  navigator.clipboard.writeText(buildRateJson(latestCregEntry)).then(() => {
+    msgShow('copyOk');
+    setTimeout(() => msgHide('copyOk'), 2500);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+//  CSV PARSER & FETCH
+// ════════════════════════════════════════════════════════════
+function parseCregCsv(raw) {
+  const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  let hi = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].toLowerCase();
+    if ((l.includes('flanders') || l.includes('vlaand')) && (l.includes('brussels') || l.includes('brussel'))) { hi = i; break; }
+  }
+  if (hi < 0) return null;
+  const sep  = lines[hi].includes(';') ? ';' : ',';
+  const hdrs = lines[hi].split(sep).map(h => h.replace(/"/g,'').trim());
+  const idx  = {
+    period: hdrs.findIndex(h => /period|quarter|kwart/i.test(h)),
+    vl: hdrs.findIndex(h => /flanders|vlaand/i.test(h)),
+    br: hdrs.findIndex(h => /brussels|brussel/i.test(h)),
+    wa: hdrs.findIndex(h => /wallonia|walloni/i.test(h)),
+  };
+  if (idx.vl < 0) return null;
+  const toEur = s => { if (!s) return null; const n = parseFloat(s.replace(',','.')); return isNaN(n) ? null : +(n/100).toFixed(5); };
+  const result = [];
+  for (let i = hi + 1; i < lines.length; i++) {
+    const c = lines[i].split(sep).map(x => x.replace(/"/g,'').trim());
+    const period = c[idx.period >= 0 ? idx.period : 0];
+    if (!period) continue;
+    const vl = toEur(c[idx.vl]);
+    if (!vl) continue;
+    result.push({ period, Vlaanderen: vl, Brussel: toEur(c[idx.br]), Wallonië: toEur(c[idx.wa]) });
+  }
+  return result.length ? result : null;
+}
+
+async function fetchCsvCreg() {
+  for (const url of [CREG_CSV, CORS_PROXY + encodeURIComponent(CREG_CSV)]) {
+    try {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) continue;
+      const d = parseCregCsv(await r.text());
+      if (d) return d;
+    } catch(_) {}
+  }
+  return null;
+}
+
+// ════════════════════════════════════════════════════════════
+//  HELPERS & CALCULATOR
+// ════════════════════════════════════════════════════════════
+function msgShow(id)          { document.getElementById(id).classList.add('show'); }
+function msgHide(id)          { document.getElementById(id).classList.remove('show'); }
+function msgShowTxt(id, html) { const e = document.getElementById(id); e.innerHTML = html; e.classList.add('show'); }
+
+function liveUpdate() {
+  const l = clamp(+document.getElementById('pctLeft').value   || 0, 0, 100);
+  const r = clamp(+document.getElementById('pctReturn').value || 0, 0, 100);
+  document.getElementById('fillLeft').style.width   = l + '%';
+  document.getElementById('fillReturn').style.width = r + '%';
+}
+function clamp(v,a,b) { return Math.min(Math.max(v,a),b); }
+
+function calculate() {
+  const maxKwh  = parseFloat(document.getElementById('maxKwh').value);
+  const pctLeft = parseFloat(document.getElementById('pctLeft').value);
+  const pctRet  = parseFloat(document.getElementById('pctReturn').value);
+  if ([maxKwh, pctLeft, pctRet].some(isNaN)) { alert('Vul alle velden correct in.'); return; }
+  if (pctLeft < pctRet) { alert('Het vertrekpercentage kan niet lager zijn dan het terugkeerpercentage.'); return; }
+  const usedPct = pctLeft - pctRet;
+  const usedKwh = (usedPct / 100) * maxKwh;
+  const total   = usedKwh * currentRate;
+  document.getElementById('resUsedPct').textContent = usedPct.toFixed(1) + '%';
+  document.getElementById('resKwh').textContent     = usedKwh.toFixed(2);
+  document.getElementById('resRate').textContent    = '€' + currentRate.toFixed(4);
+  document.getElementById('resTotal').textContent   = total.toFixed(2);
+  document.getElementById('resFormula').textContent = `${usedKwh.toFixed(2)} kWh × €${currentRate.toFixed(4)} = €${total.toFixed(2)}`;
+  const rc = document.getElementById('resultCard');
+  rc.classList.remove('show'); void rc.offsetWidth; rc.classList.add('show');
+  rc.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+init();
+</script>
+</body>
+</html>
