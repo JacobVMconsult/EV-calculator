@@ -129,7 +129,7 @@
   label { display: block; font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
   label span { font-family: var(--mono); font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 4px; }
   .input-wrap { position: relative; display: flex; align-items: center; }
-  input[type="number"], input[type="password"] {
+  input[type="number"], input[type="password"], input[type="text"] {
     width: 100%; background: var(--surface); border: 1px solid var(--border);
     color: var(--text); font-family: var(--mono); font-size: 16px;
     padding: 12px 56px 12px 16px; border-radius: 8px; outline: none;
@@ -307,18 +307,12 @@
   // ── GitHub Pages URL ───────────────────────────────────────
   // Vervang dit met jouw eigen GitHub Pages URL na setup.
   // Formaat: 'https://JOUW-GEBRUIKERSNAAM.github.io/REPO-NAAM'
-  const GITHUB_PAGES_URL = 'https://JOUW-GEBRUIKERSNAAM.github.io/REPO-NAAM';
-
-  // CREG CSV
-  const CREG_CSV   = 'https://www.creg.be/sites/default/files/assets/Prices/CREG_Tariff_EV.csv';
-  const CORS_PROXY = 'https://corsproxy.io/?url=';
+  const GITHUB_PAGES_URL = 'https://jacobvmconsult.github.io/EV-calculator';
 
   // ── Runtime state ──────────────────────────────────────────
   let currentRate   = FALLBACK_RATE;
   let adminUnlocked = false;
   let adminVisible  = false;
-  let cregData      = null;
-  let latestCregEntry = null;
 </script>
 
 <!-- ══ HEADER ══════════════════════════════════════════════ -->
@@ -374,42 +368,62 @@
         <span class="rib-val" id="ribVal">—</span>
       </div>
 
-      <!-- CREG fetch -->
+      <!-- CREG kwartaalupdate -->
       <div class="fetch-block">
         <div class="fetch-row">
           <div class="fetch-info">
-            <h3>Nieuw CREG-tarief ophalen</h3>
-            <p id="lastFetchTxt">Klik om het actuele kwartaaltarief te laden van creg.be</p>
+            <h3>Kwartaaltarief bijwerken</h3>
+            <p id="lastFetchTxt">Raadpleeg creg.be en stel het nieuwe tarief in</p>
           </div>
-          <button class="fetch-btn" id="fetchBtn" onclick="loadCreg()">
-            <span id="fetchIco">↓</span> Ophalen
-          </button>
+          <a href="https://www.creg.be/nl/consumenten/prijzen-en-tarieven/creg-tarief-voor-terugbetaling-thuisladen-bedrijfswagens"
+             target="_blank" class="fetch-btn">
+            🔗 Naar creg.be
+          </a>
         </div>
-        <div class="msg success" id="fetchOk"></div>
-        <div class="msg error"   id="fetchErr"></div>
 
-        <!-- CREG tabel -->
-        <div class="creg-result" id="cregResult">
+        <!-- Bekende tarieven als referentie -->
+        <div style="margin-top:16px; padding-top:14px; border-top:1px solid rgba(0,229,160,.1);">
+          <p style="font-family:var(--mono); font-size:11px; color:var(--muted); margin-bottom:10px;">
+            📋 Bekende CREG-tarieven Vlaanderen (eurocent/kWh) — controleer creg.be voor recentste waarden:
+          </p>
           <table class="creg-table">
-            <thead><tr><th>Kwartaal</th><th>Vlaanderen</th><th>Brussel</th><th>Wallonië</th></tr></thead>
-            <tbody id="cregBody"></tbody>
+            <thead><tr><th>Kwartaal</th><th>Vlaanderen</th><th>€/kWh</th></tr></thead>
+            <tbody>
+              <tr class="top"><td>Q2/2026 ★</td><td>31,91</td><td>0,3191</td></tr>
+              <tr><td>Q1/2026</td><td>31,32</td><td>0,3132</td></tr>
+              <tr><td>Q4/2025</td><td>30,70</td><td>0,3070</td></tr>
+              <tr><td>Q3/2025</td><td>34,56</td><td>0,3456</td></tr>
+              <tr><td>Q2/2025</td><td>31,94</td><td>0,3194</td></tr>
+            </tbody>
           </table>
         </div>
 
-        <!-- GitHub update instructie -->
-        <div class="github-block" id="githubBlock">
-          <h3>📋 Pas rate.json aan op GitHub</h3>
-          <ol>
-            <li>Ga naar jouw GitHub-repository</li>
-            <li>Open het bestand <strong>rate.json</strong></li>
-            <li>Klik op het <strong>potloodicoontje</strong> (Edit)</li>
-            <li>Vervang de inhoud met onderstaande waarden</li>
-            <li>Klik op <strong>Commit changes</strong></li>
-            <li>Na ~1 minuut is het nieuwe tarief actief voor iedereen</li>
-          </ol>
-          <div class="json-preview" id="jsonPreview"></div>
-          <button class="copy-btn" onclick="copyJson()">📋 Kopieer JSON naar klembord</button>
-          <div class="msg success" id="copyOk" style="margin-top:8px">✓ Gekopieerd!</div>
+        <!-- JSON generator -->
+        <div style="margin-top:16px; padding-top:14px; border-top:1px solid rgba(0,229,160,.1);">
+          <p style="font-family:var(--mono); font-size:11px; color:var(--muted); margin-bottom:10px;">
+            ✏ Stel het nieuwe tarief in en genereer de kant-en-klare JSON:
+          </p>
+          <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+            <div style="flex:1; min-width:120px;">
+              <label style="font-size:11px; margin-bottom:6px;">€/kWh</label>
+              <div class="input-wrap">
+                <input type="number" id="newRate" step="0.0001" min="0.001" placeholder="bv. 0.3191" oninput="generateJson()">
+                <span class="unit" style="right:10px">€</span>
+              </div>
+            </div>
+            <div style="flex:1; min-width:120px;">
+              <label style="font-size:11px; margin-bottom:6px;">Kwartaal</label>
+              <div class="input-wrap" style="position:relative">
+                <input type="text" id="newKwartaal" placeholder="bv. Q2/2026" oninput="generateJson()"
+                  style="padding-right:16px">
+              </div>
+            </div>
+          </div>
+          <div class="json-preview" id="jsonPreview" style="margin-top:12px; display:none"></div>
+          <button class="copy-btn" id="copyBtn" onclick="copyJson()" style="display:none">
+            📋 Kopieer JSON — plak in rate.json op GitHub
+          </button>
+          <div class="msg success" id="copyOk" style="margin-top:8px">✓ Gekopieerd! Plak nu in rate.json op GitHub en klik Commit.</div>
         </div>
       </div>
 
@@ -567,132 +581,40 @@ function updateAdminBox() {
 }
 
 // ════════════════════════════════════════════════════════════
-//  CREG OPHALEN
+//  JSON GENERATOR
 // ════════════════════════════════════════════════════════════
-async function loadCreg() {
-  const btn = document.getElementById('fetchBtn');
-  const ico = document.getElementById('fetchIco');
-  msgHide('fetchOk'); msgHide('fetchErr');
-  document.getElementById('cregResult').classList.remove('show');
-  document.getElementById('githubBlock').classList.remove('show');
+function generateJson() {
+  const rate     = parseFloat(document.getElementById('newRate').value);
+  const kwartaal = document.getElementById('newKwartaal').value.trim();
+  const preview  = document.getElementById('jsonPreview');
+  const copyBtn  = document.getElementById('copyBtn');
 
-  btn.disabled = true;
-  ico.innerHTML = '<span style="display:inline-block;animation:spin .7s linear infinite">↻</span>';
-  document.getElementById('lastFetchTxt').textContent = 'Bezig met ophalen van creg.be…';
-
-  const data = await fetchCsvCreg();
-  btn.disabled     = false;
-  ico.textContent  = '↓';
-
-  if (!data) {
-    document.getElementById('lastFetchTxt').textContent = 'Ophalen mislukt';
-    msgShowTxt('fetchErr',
-      `❌ CREG niet bereikbaar via browser.<br>
-       <strong>Handmatige oplossing:</strong> Ga naar
-       <a href="https://www.creg.be/nl/consumenten/prijzen-en-tarieven/creg-tarief-voor-terugbetaling-thuisladen-bedrijfswagens"
-          target="_blank" style="color:var(--accent2)">creg.be</a>,
-       lees het tarief af en pas <strong>rate.json</strong> handmatig aan op GitHub.`);
+  if (isNaN(rate) || rate <= 0 || !kwartaal) {
+    preview.style.display  = 'none';
+    copyBtn.style.display  = 'none';
     return;
   }
 
-  cregData = data;
-  latestCregEntry = [...data].reverse().find(r => r.Vlaanderen);
-
-  const now = new Date();
-  document.getElementById('lastFetchTxt').textContent =
-    `Opgehaald op ${now.toLocaleDateString('nl-BE')} om ${now.toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'})}`;
-
-  // Render tabel
-  const rows  = [...data].reverse().slice(0, 8);
-  document.getElementById('cregBody').innerHTML = rows.map((r, i) => `
-    <tr${i === 0 ? ' class="top"' : ''}>
-      <td>${r.period}${i === 0 ? ' ★' : ''}</td>
-      <td>${r.Vlaanderen ? (r.Vlaanderen*100).toFixed(2) : '—'}</td>
-      <td>${r.Brussel    ? (r.Brussel*100).toFixed(2)    : '—'}</td>
-      <td>${r.Wallonië   ? (r.Wallonië*100).toFixed(2)   : '—'}</td>
-    </tr>`).join('');
-
-  document.getElementById('cregResult').classList.add('show');
-
-  // Toon GitHub update instructie met kant-en-klare JSON
-  if (latestCregEntry) {
-    const json = buildRateJson(latestCregEntry);
-    document.getElementById('jsonPreview').textContent = json;
-    document.getElementById('githubBlock').classList.add('show');
-    msgShowTxt('fetchOk',
-      `✓ Meest recent: <strong>${latestCregEntry.period}</strong> · Vlaanderen:
-       <strong>${(latestCregEntry.Vlaanderen*100).toFixed(2)} c€/kWh</strong><br>
-       Kopieer de JSON hieronder en plak die in <strong>rate.json</strong> op GitHub.`);
-  }
-}
-
-function buildRateJson(entry) {
   const today = new Date().toISOString().split('T')[0];
-  return JSON.stringify({
-    rate:     entry.Vlaanderen,
-    kwartaal: entry.period,
+  const json = JSON.stringify({
+    rate:     rate,
+    kwartaal: kwartaal,
     updated:  today,
-    notitie:  `CREG-tarief Vlaanderen ${entry.period}`
+    notitie:  `CREG-tarief Vlaanderen ${kwartaal}`
   }, null, 2);
+
+  preview.textContent = json;
+  preview.style.display = 'block';
+  copyBtn.style.display = 'block';
+  msgHide('copyOk');
 }
 
 function copyJson() {
-  if (!latestCregEntry) return;
-  navigator.clipboard.writeText(buildRateJson(latestCregEntry)).then(() => {
+  const preview = document.getElementById('jsonPreview');
+  if (!preview.textContent) return;
+  navigator.clipboard.writeText(preview.textContent).then(() => {
     msgShow('copyOk');
-    setTimeout(() => msgHide('copyOk'), 2500);
   });
-}
-
-// ════════════════════════════════════════════════════════════
-//  CSV PARSER & FETCH
-// ════════════════════════════════════════════════════════════
-function parseCregCsv(raw) {
-  const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  let hi = -1;
-  for (let i = 0; i < lines.length; i++) {
-    const l = lines[i].toLowerCase();
-    if ((l.includes('flanders') || l.includes('vlaand')) && (l.includes('brussels') || l.includes('brussel'))) { hi = i; break; }
-  }
-  if (hi < 0) return null;
-  const sep  = lines[hi].includes(';') ? ';' : ',';
-  const hdrs = lines[hi].split(sep).map(h => h.replace(/"/g,'').trim());
-  const idx  = {
-    period: hdrs.findIndex(h => /period|quarter|kwart/i.test(h)),
-    vl: hdrs.findIndex(h => /flanders|vlaand/i.test(h)),
-    br: hdrs.findIndex(h => /brussels|brussel/i.test(h)),
-    wa: hdrs.findIndex(h => /wallonia|walloni/i.test(h)),
-  };
-  if (idx.vl < 0) return null;
-  const toEur = s => { if (!s) return null; const n = parseFloat(s.replace(',','.')); return isNaN(n) ? null : +(n/100).toFixed(5); };
-  const result = [];
-  for (let i = hi + 1; i < lines.length; i++) {
-    const c = lines[i].split(sep).map(x => x.replace(/"/g,'').trim());
-    const period = c[idx.period >= 0 ? idx.period : 0];
-    if (!period) continue;
-    const vl = toEur(c[idx.vl]);
-    if (!vl) continue;
-    result.push({ period, Vlaanderen: vl, Brussel: toEur(c[idx.br]), Wallonië: toEur(c[idx.wa]) });
-  }
-  return result.length ? result : null;
-}
-
-async function fetchCsvCreg() {
-  const proxies = [
-    url => url,                                                          // direct
-    url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    url => `https://corsproxy.org/?${encodeURIComponent(url)}`,
-  ];
-  for (const proxy of proxies) {
-    try {
-      const r = await fetch(proxy(CREG_CSV), { cache: 'no-store' });
-      if (!r.ok) continue;
-      const d = parseCregCsv(await r.text());
-      if (d) return d;
-    } catch(_) {}
-  }
-  return null;
 }
 
 // ════════════════════════════════════════════════════════════
